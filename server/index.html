@@ -1,0 +1,272 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <style>
+        #table {
+            text-align: center;
+            margin: auto;
+            width: 75%;
+        }
+
+        #table select {
+            width: 100%;
+        }
+
+        #table td {
+            padding: 5px;
+        }
+
+        .color {
+            margin-left:  3px;
+            display: inline-block;
+            min-width: 10px;
+            min-height: 10px;
+            border: 1px solid black;
+            border-radius: 10px;
+        }
+
+        .color div {
+          display: none;
+          position: absolute;
+          background-color: #f9f9f9;
+          min-width: 160px;
+          box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+          z-index: 1;
+        }
+
+        .color a{
+          color: black;
+          padding: 12px 16px;
+            margin: 0;
+          text-decoration: none;
+          display: block;
+        }
+
+        .color_ex {
+            display: none;
+        }
+
+        /* Change color of dropdown links on hover */
+        .dropdown-content a:hover {background-color: #f1f1f1}
+
+
+    </style>
+</head>
+<body>
+<h1>Videohub</h1>
+<div id="meta">
+</div>
+<div class="color color_ex">
+    <div>
+        <a href="#" style="background: red; color: white">Red</a>
+        <a href="#" style="background: green">Green</a>
+        <a href="# "style="background: blue;color: white">Blue</a>
+        <a href="#" style="background: yellow">Yellow</a>
+        <a href="#" style="background: indigo;color: white">Indigo</a>
+        <a href="#" style="background: violet">Violet</a>
+        <a href="#" style="background: none">White</a>
+    </div>
+</div>
+
+<div>
+    <table id="table">
+        <tbody></tbody>
+    </table>
+</div>
+</body>
+
+<script>
+    document.body.addEventListener('click', (ev) => {
+        document.querySelectorAll('.color').forEach((color) => {
+            if (ev.target !== color)
+                color.children[0].style.display = 'none';
+        });
+    });
+
+    let outputs = {};
+    let inputs = {};
+    let routes = {};
+    let size = 40;
+    for (let i = 0; i < 40; i++) {
+        outputs[i] = "Output " + (i + 1);
+        inputs[i] = "Input " + (i + 1);
+        routes[i] = i + 2;
+        if (i >= 39)
+            routes[i] = i - 1;
+    }
+
+    function walk(items, cb) {
+        for (let key in items) {
+            if (!items.hasOwnProperty(key))
+                continue;
+            cb(items[key], key, items);
+        }
+    }
+
+    function cleanTable(selector) {
+        let table = document.querySelector(selector);
+
+        if (document.querySelector(selector + " tbody"))
+            table.removeChild(document.querySelector(selector + " tbody"));
+
+        let tbody = document.createElement("tbody");
+        table.appendChild(tbody);
+
+        return tbody;
+    }
+
+    function makeTD(row, innerHTML) {
+        let td = document.createElement('td');
+        td.innerHTML = innerHTML;
+        row.appendChild(td);
+        return td;
+    }
+
+    function makeTable(inputs, outputs, routes, size, colors, callback) {
+        let tbody = cleanTable("#table");
+        let rows = [];
+        for (let i = 0; i < (size > 20 ? 6 : 3); i++) {
+            rows[i] = document.createElement('tr');
+            tbody.appendChild(rows[i]);
+        }
+
+        let select = document.createElement("select");
+        walk(inputs, (value, key) => {
+            let opt = document.createElement("option");
+            opt.innerText = value;
+            opt.value = key;
+            select.appendChild(opt);
+        });
+
+        walk(outputs, (value, key) => {
+            let elem = makeTD(rows[key % rows.length]);
+            elem.innerText = (parseInt(key) + 1) + ": " + outputs[key];
+
+            let color = 'white';
+            if (key in colors)
+                color = colors[key];
+
+            let ex = document.querySelector(".color_ex").cloneNode(true);
+            ex.classList.remove('color_ex');
+            ex.style.background = color;
+            ex.addEventListener('click', (ev) => {
+                console.log('test');
+                ex.children[0].style.display = 'block'
+                }
+            );
+            walk(ex.children[0].children, ((color) => color.addEventListener('click', () => {
+                let v = {};
+                v[key] = color.style.backgroundColor;
+                console.log(color);
+                action('post', 'settings', {
+                'colors': v
+            })})));
+
+            elem.appendChild(ex);
+
+            let select2 = select.cloneNode(true);
+
+            select2.addEventListener('change', callback);
+            select2.setAttribute('data-dest', key);
+
+            select2.value = routes[key];
+            elem.appendChild(select2);
+        });
+    }
+
+    function action(method, action, data, succ, fail) {
+        if (typeof succ !== "function")
+            succ = () => {
+            };
+
+        if (typeof fail !== "function")
+            fail = (err, text) => false;
+
+        let http = new XMLHttpRequest();
+        http.onreadystatechange = function (ev) {
+            if (http.readyState === 4) {
+                if (http.status === 200) {
+                    try {
+                    data = JSON.parse(http.responseText);
+
+                    }catch (e) {
+                        data = http.responseText;
+                    }
+                    succ(data);
+                }
+                else if (fail(http.status, http.responseText) === false)
+                    alert("Failed performing action: " + http.status + "\n" + http.responseText);
+            }
+        };
+        http.open(method, '/api?action=' + action);
+        if (data !== null) {
+            http.setRequestHeader('Content-type', 'application/json');
+            http.send(JSON.stringify(data));
+        } else
+            http.send();
+        return http;
+    }
+
+    function compare(obj1, obj2) {
+        if (obj1 === obj2)
+            return true;
+
+        if (typeof obj1 !== typeof obj2)
+            return false;
+
+        if (obj1 === null)
+            return false;
+
+        if (typeof obj1 === 'object') {
+            if (Object.keys(obj1).length !== Object.keys(obj2).length)
+                return false;
+
+            if (!Object.keys(obj1).every(key => obj2.hasOwnProperty(key)))
+                return false;
+
+            return Object.keys(obj1).every(
+                key => compare(obj1[key], obj2[key])
+            );
+        }
+        return obj1 == obj2;
+    }
+
+    let lastData = null;
+    function update_loop() {
+        action('get', 'status', null, (data) => {
+
+            if (!compare(lastData, data)) {
+                console.log("Reloading console...");
+
+                // META
+                document.querySelector("#meta").innerText = data['meta']['name'] +
+                    "\nSize: " + data['meta']['size'] + "x" + data['meta']['size'];
+
+                // ROUTES
+                makeTable(data['inputs'], data['outputs'], data['routes'], data['meta']['size'], data['colors'], (ev) => {
+                    console.log("Destination: " + ev.target.getAttribute('data-dest') + " Source: " + ev.target.value);
+                    ev.target.setAttribute('disabled', 'true');
+                    action('post', 'route', {
+                            'dest': ev.target.getAttribute('data-dest'),
+                            'src': ev.target.value
+                        },
+
+                        () => // Success
+                            ev.target.removeAttribute('disabled'),
+
+                        () => { // Failure
+                            ev.target.removeAttribute('disabled');
+                            ev.target.value = routes[ev.target.getAttribute('data-dest')];
+                            return false;
+                        });
+                });
+            }
+
+            lastData = data;
+            setTimeout(update_loop, 1000);
+        });
+    }
+
+    update_loop();
+</script>
+</html>
